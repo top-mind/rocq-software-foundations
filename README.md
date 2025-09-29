@@ -7,4 +7,7 @@
   + [ ] Norm.v
   + [ ] LibTatics
 - [ ] vfa
+  + [x] Perm
+  + [x] Sort
+  + [x] SearchTree
 - [ ] slf

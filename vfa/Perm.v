@@ -438,7 +438,10 @@ Print Permutation.
      - 3. [[1;1]] is NOT a permutation of [[1;2]].
      - 4. [[1;2;3;4]] IS a permutation of [[3;4;2;1]].
 
-   YOUR TASK: Add three more properties. Write them here: *)
+   YOUR TASK: Add three more properties. Write them here:
+     - 5. If [Perm al bl], then [count x al = count x bl]
+     *)
+
 
 (** Now, let's examine all the theorems in the Coq library about
     permutations: *)
@@ -448,7 +451,7 @@ Search Permutation.  (* Browse through the results of this query! *)
 (** Which of the properties that you wrote down above have already
     been proved as theorems by the Coq library developers?  Answer
     here:
-
+      5: Permutation_count_occ
 *)
 (* Do not modify the following line: *)
 Definition manual_grade_for_Permutation_properties : option (nat*string) := None.
@@ -534,7 +537,12 @@ Check app_comm_cons.
 Example permut_example: forall (a b: list nat),
   Permutation (5 :: 6 :: a ++ b) ((5 :: b) ++ (6 :: a ++ [])).
 Proof.
-(* FILL IN HERE *) Admitted.
+  intros.
+  rewrite app_nil_r. simpl.
+  apply perm_skip.
+  rewrite app_comm_cons.
+  apply Permutation_app_comm.
+Qed.
 (** [] *)
 
 (** **** Exercise: 2 stars, standard (not_a_permutation)
@@ -548,7 +556,11 @@ Check Permutation_length_1_inv.
 Example not_a_permutation:
   ~ Permutation [1;1] [1;2].
 Proof.
-(* FILL IN HERE *) Admitted.
+  intros contra.
+  apply Permutation_cons_inv in contra.
+  apply Permutation_length_1_inv in contra.
+  inversion contra.
+Qed.
 (** [] *)
 
 (* ================================================================= *)
@@ -614,7 +626,26 @@ Theorem Forall_perm: forall {A} (f: A -> Prop) al bl,
   Permutation al bl ->
   Forall f al -> Forall f bl.
 Proof.
-  (* FILL IN HERE *) Admitted.
+  intros A f al.
+  induction al; intros.
+  - apply Permutation_nil in H. subst. auto.
+  - destruct (Permutation_vs_cons_inv (Permutation_sym H)) as [l1 [l2 HeqCA]].
+    subst. apply Permutation_cons_app_inv in H.
+    inv H0.
+    specialize (IHal (l1 ++ l2) H H4).
+    apply Forall_app.
+    apply Forall_app in IHal. destruct IHal as [H1 H2].
+    split; auto.
+  (*
+  Permutation_cons_app_inv : forall (A : Type) (l l1 l2 : list A) (a : A),
+    Permutation (a :: l) (l1 ++ a :: l2) -> Permutation l (l1 ++ l2) 
+  Permutation_vs_cons_inv: forall [A : Type] [l l1 : list A] [a : A],
+    Permutation l (a :: l1) -> exists l' l'' : list A, l = l' ++ a :: l''
+  Forall_app: forall [A : Type] (P : A -> Prop) (l1 l2 : list A),
+    Forall P (l1 ++ l2) <-> Forall P l1 /\ Forall P l2
+  *)
+Qed.
+    
 (** [] *)
 
 (* ################################################################# *)
