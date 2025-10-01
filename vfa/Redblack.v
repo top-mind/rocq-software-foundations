@@ -432,7 +432,14 @@ Lemma balanceP : forall (V : Type) (P : key -> V -> Prop) (c : color) (l r : tre
     P k v ->
     ForallT P (balance c l k v r).
 Proof.
-  (* FILL IN HERE *) Admitted.
+  intros. unfold balance.
+  repeat match goal with
+  | H: ForallT _ (T _ _ _ _ _) |- _ => destruct H as [? [? ?]]
+  | |- ForallT _ (match ?c with Red => _ | Black => _ end) => destruct c
+  | |- ForallT _ (T _ _ _ _ _) => repeat split
+  | |- ForallT _ (match ?t with E => _ | T _ _ _ _ _ => _ end) => destruct t
+  end; auto; try lia.
+Qed.
 
 (** [] *)
 
@@ -446,7 +453,13 @@ Lemma insP : forall (V : Type) (P : key -> V -> Prop) (t : tree V) (k : key) (v 
     P k v ->
     ForallT P (ins k v t).
 Proof.
-  (* FILL IN HERE *) Admitted.
+  intros. induction t; simpl; auto.
+  inv H. destruct H2 as [? ?].
+  destruct (int_ltb_reflect k k0); destruct (int_ltb_reflect k0 k); try lia.
+  - apply balanceP; auto.
+  - apply balanceP; auto.
+  - assert (k = k0) by (apply Abs_inj; lia). subst. simpl; auto.
+Qed.
 
 (** [] *)
 
@@ -458,9 +471,16 @@ Proof.
 Lemma ins_BST : forall (V : Type) (t : tree V) (k : key) (v : V),
     BST t ->
     BST (ins k v t).
-Proof.
-  (* FILL IN HERE *) Admitted.
-
+Proof with try lia; auto.
+  intros. induction H; [constructor; constructor|simpl].
+  destruct (int_ltb_reflect k k0); destruct (int_ltb_reflect k0 k)...
+  - apply balance_BST...
+    apply insP...
+  - apply balance_BST...
+    apply insP...
+  - assert (k = k0) by (apply Abs_inj; lia). subst.
+    constructor...
+Qed.
 (** [] *)
 
 (** **** Exercise: 2 stars, standard (insert_BST) *)
@@ -472,7 +492,13 @@ Theorem insert_BST : forall (V : Type) (t : tree V) (v : V) (k : key),
     BST t ->
     BST (insert k v t).
 Proof.
-  (* FILL IN HERE *) Admitted.
+  intros.
+  unfold insert, make_black.
+  destruct (ins k v t) eqn:E.
+  - constructor.
+  - assert (BST (ins k v t)) by (apply ins_BST; apply H).
+    rewrite E in H0. inv H0. constructor; auto.
+Qed.
 (** [] *)
 
 (* ################################################################# *)
@@ -497,6 +523,10 @@ Proof. auto. Qed.
 
 (** Prove that [balance] preserves the result of [lookup] on non-empty
     trees. Use the same proof technique as in [balance_BST]. *)
+Lemma ltb_Zltb : forall n m : int, ltb n m = (Abs n <? Abs m).
+Proof.
+  intros. bdestruct (ltb n m); bdestruct (Abs n <? Abs m); auto; lia.
+Qed.
 
 Lemma balance_lookup: forall (V : Type) (d : V) (c : color) (k k' : key) (v : V)
                         (l r : tree V),
@@ -511,8 +541,17 @@ Lemma balance_lookup: forall (V : Type) (d : V) (c : color) (k k' : key) (v : V)
            then lookup d k' r
            else v.
 Proof.
-  (* FILL IN HERE *) Admitted.
-
+  intros. unfold balance.
+  repeat match goal with
+  | H: ForallT _ (T _ _ _ _ _) |- _ => destruct H as [? [? ?]]
+  | H: BST (T _ _ _ _ _) |- _ => inv H
+  | |- lookup _ _ (T _ _ _ _ _) = _ => simpl; repeat rewrite ltb_Zltb
+  | |- lookup _ _ (match ?c with | Red => _ | Black => _ end) = _ => destruct c
+  | |- lookup _ _ (match ?t with | E => _ | T _ _ _ _ _ => _ end) = _ => destruct t
+  | |- _ = (if ?c then _ else _) => destruct c eqn:?; try reflexivity
+  | |- (if ?c then _ else _) = _ => destruct c eqn:?; try lia; try reflexivity
+  end.
+Qed.
 (** [] *)
 
 (** **** Exercise: 3 stars, standard (lookup_ins_eq) *)
@@ -528,8 +567,22 @@ Proof.
 Lemma lookup_ins_eq: forall (V : Type) (d : V) (t : tree V) (k : key) (v : V),
     BST t ->
     lookup d k (ins k v t) = v.
-Proof.
-  (* FILL IN HERE *) Admitted.
+Proof with try lia; auto.
+  intros.
+  induction H; simpl.
+  - bdestruct (ltb k k)...
+  - bdestruct (ltb k k0); bdestruct (ltb k0 k)...
+    + rewrite balance_lookup...
+      * bdestruct (Abs k <? Abs k0)...
+      * apply ins_BST...
+      * apply insP...
+    + rewrite balance_lookup...
+      * bdestruct (Abs k <? Abs k0); bdestruct (Abs k >? Abs k0)...
+      * apply ins_BST...
+      * apply insP...
+    + assert (k = k0) by (apply Abs_inj; lia). subst k0.
+      simpl. bdestruct (ltb k k)...
+Qed.
 
 (** [] *)
 
@@ -543,8 +596,24 @@ Theorem lookup_ins_neq: forall (V : Type) (d : V) (t : tree V) (k k' : key)
     BST t ->
     k <> k' ->
     lookup d k' (ins k v t) = lookup d k' t.
-Proof.
-  (* FILL IN HERE *) Admitted.
+Proof with try lia; auto.
+  intros.
+  induction H; simpl.
+  - bdestruct (ltb k' k); bdestruct (ltb k k'); auto.
+    assert (k = k') by (apply Abs_inj; lia). destruct (H0 H2).
+  - rewrite <- IHBST1, <-IHBST2.
+    (* automation is good *)
+    repeat match goal with
+    | |- lookup _ _ (if ?b then _ else _) = _ => bdestruct b
+    | |- _ = (if ?b then _ else _) => bdestruct b
+    | |- lookup _ _ (balance _ _ _ _ _) = _ => rewrite balance_lookup; try apply ins_BST;
+            try apply insP; try lia
+    | |- (if ?b then _ else _) = _ => bdestruct b; try lia
+    | |- lookup _ _ (T _ _ _ _ _) = _ => simpl
+    end; auto.
+    (* k = k0 *)
+    exfalso. apply H0. apply Abs_inj. lia.
+Qed.
 
 (** [] *)
 
@@ -558,7 +627,11 @@ Theorem lookup_insert_eq : forall (V : Type) (d : V) (t : tree V) (k : key)
     BST t ->
     lookup d k (insert k v t) = v.
 Proof.
-  (* FILL IN HERE *) Admitted.
+  intros. unfold insert, make_black.
+  assert (lookup d k (ins k v t) = v) by
+    (apply lookup_ins_eq; auto).
+  destruct (ins k v); auto.
+Qed.
 
 Theorem lookup_insert_neq: forall (V : Type) (d : V) (t : tree V) (k k' : key)
                              (v : V),
@@ -566,7 +639,12 @@ Theorem lookup_insert_neq: forall (V : Type) (d : V) (t : tree V) (k k' : key)
     k <> k' ->
     lookup d k' (insert k v t) = lookup d k' t.
 Proof.
-  (* FILL IN HERE *) Admitted.
+  intros. unfold insert, make_black.
+  assert (lookup d k' (ins k v t) = lookup d k' t) by (apply lookup_ins_neq; auto).
+  destruct (ins k v t) eqn:E.
+  - destruct (ins_not_E _ _ _ _ E).
+  - auto.
+Qed.
 
 (** [] *)
 
@@ -658,7 +736,10 @@ Inductive RB {V : Type} : tree V -> color -> nat -> Prop :=
 Lemma RB_blacken_parent : forall (V : Type) (t : tree V) (n : nat),
     RB t Red n -> RB t Black n.
 Proof.
-  (* FILL IN HERE *) Admitted.
+  intros. inv H.
+  - apply RB_leaf.
+  - apply RB_b; assumption.
+Qed.
 
 (** [] *)
 
@@ -689,34 +770,58 @@ Inductive NearlyRB {V : Type} : tree V -> nat -> Prop :=
     [destruct], [inv], and [constructor]; as well as previously proved
     lemmas and [auto]. *)
 
-Ltac prove_RB := admit.
+Ltac prove_RB :=
+    repeat match goal with
+    | H: NearlyRB E _ |- _ => inv H
+    | H: NearlyRB (T _ _ _ _ _) _ |- _ => inv H
+    | H: RB E _ _ |- _ => inv H
+    | H: RB (T _ _ _ _ _)  _ _ |- _ => inv H
+    | |- NearlyRB (if ?b then _ else _) _ => destruct b
+    | |- NearlyRB (match ?t with | _ => _ end) _ => destruct t
+    | |- RB (if ?b then _ else _) _ _ => destruct b
+    | |- RB (match ?t with | _ => _ end) _ _ => destruct t
+    | |- NearlyRB (T _ _ _ _ _) _ => constructor
+    | |- RB (T _ _ _ _ _) _ _ => constructor
+    | |- RB E _ 0 => constructor
+    end; auto; try apply RB_blacken_parent; auto.
 
 Lemma ins_RB : forall (V : Type) (k : key) (v : V) (t : tree V) (n : nat),
     (RB t Black n -> NearlyRB (ins k v t) n) /\
       (RB t Red n -> RB (ins k v t) Black n).
 Proof.
   induction t; split; intros; inv H; repeat constructor; simpl.
-  - (* Instantiate the inductive hypotheses. *)
+  - (* NearlyRB (ins k v (T Red t1 k0 v0 t2)) n *)
+    (* Instantiate the inductive hypotheses. *)
     specialize (IHt1 n). specialize (IHt2 n).
     (* Derive what propositional facts we can from the hypotheses. *)
     intuition.
     (* Get rid of some extraneous hypotheses. *)
     clear H H1.
+    (*
+    bdestruct (ltb k k0).
+    + constructor; auto.
+      apply RB_blacken_parent; auto.
+    + bdestruct (ltb k0 k).
+      * constructor; auto; apply RB_blacken_parent; auto.
+      * constructor; apply RB_blacken_parent; auto.
+    *)
     (* Finish with automation. *)
     prove_RB.
 
-  - specialize (IHt1 n0). specialize (IHt2 n0). intuition.
+  - (* NearlyRB (ins k v (T Black t1 k0 v0 t2)) (S n0) *)
+    specialize (IHt1 n0). specialize (IHt2 n0). intuition.
     clear H0 H2.
     prove_RB.
 
-  - specialize (IHt1 n0). specialize (IHt2 n0). intuition.
+  - (* RB (ins k v (T Black t1 k0 v0 t2)) Black (S n0) *)
+    specialize (IHt1 n0). specialize (IHt2 n0). intuition.
     clear H0 H2.
     prove_RB.
 
     (* There's nothing more you need to fill in here. Just don't
        forget to change the [Admitted.] to [Qed.] when you have
        finished developing [prove_RB]. *)
-    (* FILL IN HERE *) Admitted.
+Qed.
 
 (** [] *)
 
@@ -739,7 +844,13 @@ Lemma RB_blacken_root : forall (V : Type) (t : tree V) (n : nat),
     RB t Black n ->
     exists (n' : nat), RB (make_black t) Red n'.
 Proof.
-  (* FILL IN HERE *) Admitted.
+  intros.
+  unfold make_black. destruct t.
+  - eexists; constructor.
+  - inv H.
+    + eexists; constructor; apply RB_blacken_parent; eauto.
+    + eexists; constructor; eauto.
+Qed.
 
 (** [] *)
 
@@ -752,7 +863,11 @@ Lemma insert_RB : forall (V : Type) (t : tree V) (k : key) (v : V) (n : nat),
     RB t Red n ->
     exists (n' : nat), RB (insert k v t) Red n'.
 Proof.
-  (* FILL IN HERE *) Admitted.
+  intros.
+  unfold insert.
+  eapply RB_blacken_root.
+  apply ins_red. exact H.
+Qed.
 
 (** [] *)
 
@@ -774,17 +889,57 @@ Proof.
     - All of the proofs can be quite short. The challenge is to invent
       helpful lemmas. *)
 
-Fixpoint height {V : Type} (t : tree V) : nat
-  (* REPLACE THIS LINE WITH ":= _your_definition_ ." *). Admitted.
+Fixpoint height {V : Type} (t : tree V) : nat :=
+  match t with
+  | E => 0
+  | T _ l _ _ r => S (max (height l) (height r))
+  end.
 
-Fixpoint mindepth {V : Type} (t : tree V) : nat
-  (* REPLACE THIS LINE WITH ":= _your_definition_ ." *). Admitted.
+Fixpoint mindepth {V : Type} (t : tree V) : nat :=
+  match t with
+  | E => 0
+  | T _ l _ _ r => S (min (mindepth l) (mindepth r))
+  end.
+
+Lemma redblack_bound_max : forall V (t : tree V) n,
+    (RB t Black n -> (height t <= 2 * n + 1)%nat) /\
+    (RB t Red n -> (height t <= 2 * n)%nat).
+Proof.
+  (* I avoid using [intuition] since I see
+    "auto with *" was used through the default "intuition_solver" tactic.
+    This will be replaced by just "auto" in the future.
+    What a day! *)
+  intros V t. induction t; simpl; try lia.
+  split; intros; inv H.
+  - destruct (IHt1 n); destruct (IHt2 n).
+    (* or, just finish by intuition; lia *)
+    apply H0 in H6. apply H2 in H7.
+    lia.
+  - destruct (IHt1 n0); destruct (IHt2 n0).
+    apply H in H7. apply H1 in H8.
+    lia.
+  - destruct (IHt1 n0); destruct (IHt2 n0).
+    apply H in H7. apply H1 in H8.
+    lia.
+Qed.
+
+Lemma redblack_bound_min : forall V (t : tree V) c n,
+    RB t c n -> (mindepth t >= n)%nat.
+Proof.
+  intros. induction H; simpl; lia.
+Qed.
 
 Lemma redblack_balanced : forall (V : Type) (t : tree V) (c : color) (n : nat),
     RB t c n ->
     (height t <= 2 * mindepth t + 1)%nat.
 Proof.
-  (* FILL IN HERE *) Admitted.
+  intros.
+  specialize (redblack_bound_min _ _ _ _ H) as ?.
+  destruct (redblack_bound_max _ t n).
+  destruct c.
+  - apply H2 in H. lia.
+  - apply H1 in H. lia.
+Qed.
 
 (* Do not modify the following line: *)
 Definition manual_grade_for_redblack_bound : option (nat*string) := None.

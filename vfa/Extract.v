@@ -267,10 +267,51 @@ Hint Constructors sorted : core.
     such as [<=?] refer to [nat] comparisons, so you might need to
     adjust those in your proof. *)
 
+Theorem ins_int_cons_app : forall a (l : list int),
+    exists l1 l2, l = l1 ++ l2 /\ ins_int a l = l1 ++ a :: l2.
+Proof. intros.
+  induction l.
+  exists [], []. auto.
+  destruct IHl as [? [? [? ?]]].
+  simpl.
+  bdestruct (leb a a0).
+  - exists [], (a0 :: l); auto.
+  - rewrite H0, H. exists (a0 :: x), x0. auto.
+Qed.
+
+Theorem sort_int_perm : forall (al : list int),
+    Permutation al (sort_int al).
+Proof.
+  induction al; auto.
+  simpl. remember (sort_int al) as s.
+  destruct (ins_int_cons_app a s) as [l1 [l2 [? ?]]].
+  rewrite H0. apply Permutation_cons_app. rewrite <- H. exact IHal.
+Qed.
+
+Theorem ins_int_sorted : forall a (al : list int),
+    sorted al -> sorted (ins_int a al).
+Proof.
+  intros. induction H; simpl.
+  - constructor.
+  - bdall. repeat constructor. lia.
+  - simpl in IHsorted. bdall.
+    + (* x < a <= y *)
+      repeat constructor; auto; lia.
+Qed.
+
+Theorem sort_int_sorted : forall (al : list int),
+    sorted (sort_int al).
+Proof.
+  induction al; auto.
+  simpl. apply ins_int_sorted.
+  exact IHal.
+Qed.
+
 Theorem sort_int_correct : forall (al : list int),
     Permutation al (sort_int al) /\ sorted (sort_int al).
 Proof.
-  (* FILL IN HERE *) Admitted.
+  split; [apply sort_int_perm | apply sort_int_sorted].
+Qed.
 
 (** [] *)
 
