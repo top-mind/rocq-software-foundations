@@ -11,6 +11,7 @@
   + [x] Sort
   + [x] SearchTree
   + [x] Redblack
+  + [x] Extract
 - [ ] slf
 
 # Comments
