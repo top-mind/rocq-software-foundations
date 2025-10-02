@@ -213,6 +213,8 @@ Ltac bdestruct_guard:=
   | |- context [ if Nat.eqb ?X ?Y then _ else _] => bdestruct (Nat.eqb X Y)
   | |- context [ if Nat.ltb ?X ?Y then _ else _] => bdestruct (Nat.ltb X Y)
   | |- context [ if Nat.leb ?X ?Y then _ else _] => bdestruct (Nat.leb X Y)
+  | |- context [ if (?X >? ?Y)%nat then _ else _] => bdestruct (X >? Y)%nat
+  | |- context [ if (?X >=? ?Y)%nat then _ else _] => bdestruct (X >=? Y)%nat
   | |- context [ if Z.eqb ?X ?Y then _ else _] => bdestruct (Z.eqb X Y)
   | |- context [ if Z.ltb ?X ?Y then _ else _] => bdestruct (Z.ltb X Y)
   | |- context [ if Z.leb ?X ?Y then _ else _] => bdestruct (Z.leb X Y)
@@ -366,7 +368,8 @@ Theorem lookup_insert_eq :
   forall (V : Type) (default : V) (t : tree V) (k : key) (v : V),
     lookup default k (insert k v t) = v.
 Proof.
-  (* FILL IN HERE *) Admitted.
+  intros. induction t; simpl; bdall.
+Qed.
 (** [] *)
 
 (** **** Exercise: 2 stars, standard (lookup_insert_neq) *)
@@ -374,7 +377,9 @@ Theorem lookup_insert_neq :
   forall (V : Type) (default : V) (t : tree V) (k k' : key) (v : V),
     k <> k' -> lookup default k' (insert k v t) = lookup default k' t.
 Proof.
-  (* FILL IN HERE *) Admitted.
+  intros. induction t; simpl; bdall;
+  assert (k = k') as Heq by (apply Abs_inj; lia); destruct (H Heq).
+Qed.
 (** [] *)
 
 (** **** Exercise: 4 stars, standard, optional (int_elements) *)
@@ -382,6 +387,108 @@ Proof.
 (** Port the definition of [BST] and re-prove the properties of
     [elements] for [int]-keyed trees. Send us your solution so
     we can include it! *)
+From VFA Require SearchTree.
+Parameter int_min : int.
+Axiom int_min_is_minimum : forall (i : int), Abs int_min <= Abs i.
+
+Extract Inlined Constant int_min => "Int.min_int".
+
+Definition int_nat i := Z.to_nat(Abs i - Abs (int_min)).
+
+Ltac solve_by_min x y :=
+  intros;
+  specialize int_min_is_minimum with x;
+  specialize int_min_is_minimum with y;
+  unfold int_nat in *; lia.
+
+Theorem nlt_zlt : forall a b, (int_nat a < int_nat b)%nat <-> (Abs a < Abs b).
+Proof. solve_by_min a b. Qed.
+Theorem nle_zle : forall a b, (int_nat a <= int_nat b)%nat <-> (Abs a <= Abs b).
+Proof. solve_by_min a b. Qed.
+Theorem ngt_zgt : forall a b, (int_nat a > int_nat b)%nat <-> (Abs a > Abs b).
+Proof. solve_by_min a b. Qed.
+Theorem nge_zge : forall a b, (int_nat a >= int_nat b)%nat <-> (Abs a >= Abs b).
+Proof. solve_by_min a b. Qed.
+
+Ltac rewrite_ncmp :=
+  try rewrite nlt_zlt in *;
+  try rewrite nle_zle in *;
+  try rewrite ngt_zgt in *;
+  try rewrite nge_zge in *.
+
+Theorem int_nat_inj : forall a b, int_nat a = int_nat b -> a = b.
+Proof.
+  intros.
+  apply Abs_inj.
+  solve_by_min a b.
+Qed.
+
+Fixpoint tree_nat {V} (t : tree V) :=
+  match t with
+  | E => SearchTree.E
+  | T l k v r => SearchTree.T (tree_nat l) (int_nat k) v (tree_nat r)
+  end.
+
+Theorem insert_relate : forall V (t : tree V) k v,
+    tree_nat (insert k v t) = SearchTree.insert (int_nat k) v (tree_nat t).
+Proof.
+  intros. induction t; simpl; auto.
+  bdall; rewrite_ncmp; try lia; simpl;
+    try rewrite IHt1; try rewrite IHt2; auto.
+Qed.
+
+Theorem lookup_relate : forall V d k (t : tree V),
+  lookup d k t = SearchTree.lookup d (int_nat k) (tree_nat t).
+Proof.
+  intros. induction t; simpl; auto.
+  bdall; rewrite_ncmp; try lia.
+Qed.
+
+Definition BST {V} (t : tree V):= SearchTree.BST (tree_nat t).
+
+Fixpoint list_nat {V} (l : list (key * V)) :=
+  match l with
+  | [] => []
+  | (k, v) :: l' => (int_nat k, v) :: list_nat l'
+  end.
+
+Lemma list_nat_cons : forall V (l1 l2 : list (key * V)),
+    list_nat (l1 ++ l2) = (list_nat l1) ++ (list_nat l2).
+Proof.
+  intros.
+  induction l1; auto.
+  simpl. destruct a.
+  rewrite IHl1.
+  reflexivity.
+Qed.
+
+Lemma elements_aux_cons : forall V (t:tree V) l,
+    elements_aux t l = elements_aux t [] ++ l.
+Proof.
+  intros V t. induction t; auto.
+  intros. simpl.
+  rewrite IHt1, IHt2.
+  symmetry. rewrite IHt1.
+  rewrite <-app_assoc. reflexivity.
+Qed.
+
+Lemma elements_cons : forall V (l r : tree V) k v,
+    elements (T l k v r) = (elements l) ++ (k, v) :: (elements r).
+Proof.
+  intros. unfold elements. simpl.
+  rewrite elements_aux_cons. reflexivity.
+Qed.
+
+Theorem elements_relate : forall V (t:tree V),
+    list_nat (elements t) = SearchTree.elements (tree_nat t).
+Proof.
+  intros. induction t; simpl; auto.
+  rewrite elements_cons.
+  rewrite list_nat_cons.
+  simpl.
+  rewrite IHt1. rewrite IHt2.
+  reflexivity.
+Qed.
 
 (** [] *)
 
