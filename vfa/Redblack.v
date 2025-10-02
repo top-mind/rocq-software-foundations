@@ -79,8 +79,49 @@ Fixpoint lookup {V : Type} (d : V) (x: key) (t : tree V) : V :=
 
     - [balance] takes care of rebalancing the tree on the way back
       up. *)
+(* Experiment:
+    I use a smarter [balance]
+    [old_balance] always colors current node red if double red children found.
+    The smarter one maintain current node black if the other son is black.
+    (the 'optimization' cannot be observed <del>significantly</del> under test_redblack compiled by ocamlopt)
+    *)
+Definition make_black {V : Type} (t : tree V) : tree V :=
+  match t with
+  | E => E
+  | T _ a x vx b => T Black a x vx b
+  end.
 
-Definition balance
+Definition balance {V} c (t1:tree V) k vk t2 :=
+  match c with
+  | Red => T Red t1 k vk t2
+  | _ => match t1 with
+        | T Red (T Red a x vx b) y vy c =>
+          match t2 with
+          | T Red _ _ _ _ => T Red (make_black t1) k vk (make_black t2)
+          | _ => T Black (T Red a x vx b) y vy (T Red c k vk t2)
+          end
+        | T Red a x vx (T Red b y vy c) =>
+          match t2 with
+          | T Red _ _ _ _ => T Red (make_black t1) k vk (make_black t2)
+          | _ =>  T Black (T Red a x vx b) y vy (T Red c k vk t2)
+          end
+        | _ => match t2 with
+              | T Red (T Red b y vy c) z vz d =>
+                match t1 with
+                | T Red _ _ _ _ => T Red (make_black t1) k vk (make_black t2)
+	              | _ => T Black (T Red t1 k vk b) y vy (T Red c z vz d)
+                end
+              | T Red b y vy (T Red c z vz d)  =>
+                match t1 with
+                | T Red _ _ _ _ => T Red (make_black t1) k vk (make_black t2)
+                | _ => T Black (T Red t1 k vk b) y vy (T Red c z vz d)
+                end
+              | _ => T Black t1 k vk t2
+              end
+        end
+  end.
+
+Definition old_balance
            {V : Type} (c : color) (t1 : tree V) (k : key) (vk : V)
            (t2 : tree V) : tree V :=
   match c with
@@ -108,11 +149,6 @@ Fixpoint ins {V : Type} (x : key) (vx : V) (t : tree V) : tree V :=
                         else T c a x vx b
   end.
 
-Definition make_black {V : Type} (t : tree V) : tree V :=
-  match t with
-  | E => E
-  | T _ a x vx b => T Black a x vx b
-  end.
 
 Definition insert {V : Type} (x : key) (vx : V) (t : tree V) :=
   make_black (ins x vx t).
@@ -403,7 +439,7 @@ Lemma balance_BST: forall (V : Type) (c : color) (l : tree V) (k : key)
     BST r ->
     BST (balance c l k v r).
 Proof.
-  intros. unfold balance.
+  intros. unfold balance; unfold make_black.
 
   repeat
     match goal with
@@ -746,11 +782,11 @@ Qed.
 (** Relation [NearlyRB] expresses, "the tree is a red-black tree,
     except that it's nonempty and it is permitted to have two
     consecutive red nodes at the root only."  *)
+(* For my fast_balance we need a stronger NearlyRB: *)
 
 Inductive NearlyRB {V : Type} : tree V -> nat -> Prop :=
-| NearlyRB_r : forall (l r : tree V) (k : key) (v : V) (n : nat),
-    RB l Black n ->
-    RB r Black n ->
+| NearlyRB_r_lr : forall (l r : tree V) (k : key) (v : V) (n : nat),
+    RB l Black n /\ RB r Red n \/ RB l Red n /\ RB r Black n ->
     NearlyRB (T Red l k v r) n
 | NearlyRB_b : forall (l r : tree V) (k : key) (v : V) (n : nat),
     RB l Black n ->
@@ -771,11 +807,13 @@ Inductive NearlyRB {V : Type} : tree V -> nat -> Prop :=
     lemmas and [auto]. *)
 
 Ltac prove_RB :=
+    unfold make_black; (**)
     repeat match goal with
     | H: NearlyRB E _ |- _ => inv H
     | H: NearlyRB (T _ _ _ _ _) _ |- _ => inv H
     | H: RB E _ _ |- _ => inv H
     | H: RB (T _ _ _ _ _)  _ _ |- _ => inv H
+    | H: _ /\ _ \/ _ /\ _ |- _ => destruct H as [[? ?]|[? ?]] (**)
     | |- NearlyRB (if ?b then _ else _) _ => destruct b
     | |- NearlyRB (match ?t with | _ => _ end) _ => destruct t
     | |- RB (if ?b then _ else _) _ _ => destruct b
@@ -783,7 +821,9 @@ Ltac prove_RB :=
     | |- NearlyRB (T _ _ _ _ _) _ => constructor
     | |- RB (T _ _ _ _ _) _ _ => constructor
     | |- RB E _ 0 => constructor
-    end; auto; try apply RB_blacken_parent; auto.
+    | |- _ /\ _ \/ _ /\ _ => auto; left; split (**)
+    | |- _ => auto using RB_blacken_parent
+    end.
 
 Lemma ins_RB : forall (V : Type) (k : key) (v : V) (t : tree V) (n : nat),
     (RB t Black n -> NearlyRB (ins k v t) n) /\
@@ -807,12 +847,10 @@ Proof.
     *)
     (* Finish with automation. *)
     prove_RB.
-
   - (* NearlyRB (ins k v (T Black t1 k0 v0 t2)) (S n0) *)
     specialize (IHt1 n0). specialize (IHt2 n0). intuition.
     clear H0 H2.
     prove_RB.
-
   - (* RB (ins k v (T Black t1 k0 v0 t2)) Black (S n0) *)
     specialize (IHt1 n0). specialize (IHt2 n0). intuition.
     clear H0 H2.

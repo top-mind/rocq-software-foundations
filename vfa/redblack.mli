@@ -13,11 +13,11 @@ val empty_tree : 'a1 tree
 
 val lookup : 'a1 -> key -> 'a1 tree -> 'a1
 
+val make_black : 'a1 tree -> 'a1 tree
+
 val balance : color -> 'a1 tree -> key -> 'a1 -> 'a1 tree -> 'a1 tree
 
 val ins : key -> 'a1 -> 'a1 tree -> 'a1 tree
-
-val make_black : 'a1 tree -> 'a1 tree
 
 val insert : key -> 'a1 -> 'a1 tree -> 'a1 tree
 
