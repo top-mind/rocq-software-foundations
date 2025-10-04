@@ -174,7 +174,21 @@ End FunTableExamples.
     Write unit tests to check the operation of [get] and [set]. *)
 
 Module NatFunTableExamples.
-  (* FILL IN HERE *)
+  Module NatVal.
+    Definition V := nat.
+    Definition default := 0.
+  End NatVal.
+  Module NatFunTable := FunTable NatVal.
+  Import NatFunTable.
+  
+  Theorem test_get_empty : get 0 empty = 0.
+  Proof. reflexivity. Qed.
+  Theorem test_get_set0 : get 10 (set 10 20 empty) = 20.
+  Proof. reflexivity. Qed.
+  Theorem test_get_set1 : get 10 (set 5 1 empty) = 0.
+  Proof. reflexivity. Qed.
+  Theorem test_get_set2 : get 10 (set 5 1 (set 10 11 empty)) = 11.
+  Proof. reflexivity. Qed.
 End NatFunTableExamples.
 
 (** [] *)
@@ -195,26 +209,37 @@ Module ListsTable (VT : ValType) <: Table.
 
   Definition empty : table := [].
 
-  Fixpoint get (k : key) (t : table) : V
-    (* REPLACE THIS LINE WITH ":= _your_definition_ ." *). Admitted.
+  Fixpoint get (k : key) (t : table) : V := 
+    match t with
+    | [] => default
+    | (k0, v0) :: t' => if k0 =? k then v0 else get k t'
+    end.
 
   Definition set (k : key) (v : V) (t : table) : table
-    (* REPLACE THIS LINE WITH ":= _your_definition_ ." *). Admitted.
+    := (k, v) :: t.
 
   Theorem get_empty_default: forall (k : key),
       get k empty = default.
   Proof.
-    (* FILL IN HERE *) Admitted.
+    reflexivity.
+  Qed.
 
   Theorem get_set_same: forall (k : key) (v : V) (t : table),
       get k (set k v t) = v.
   Proof.
-    (* FILL IN HERE *) Admitted.
+    intros.
+    simpl.
+    rewrite Nat.eqb_refl.
+    reflexivity.
+  Qed.
 
   Theorem get_set_other: forall (k k' : key) (v : V) (t : table),
       k <> k' -> get k' (set k v t) = get k' t.
   Proof.
-    (* FILL IN HERE *) Admitted.
+    intros. simpl.
+    destruct (Nat.eqb_neq k k'). intuition.
+    rewrite H2. reflexivity.
+  Qed.
 
 End ListsTable.
 
@@ -228,15 +253,18 @@ Module StringListsTableExamples.
 
   Example ex1 : get 0 empty = "".
   Proof.
-    (* FILL IN HERE *) Admitted.
+    reflexivity.
+  Qed.
 
   Example ex2 : get 0 (set 0 "A" empty) = "A".
   Proof.
-    (* FILL IN HERE *) Admitted.
+    reflexivity.
+  Qed.
 
   Example ex3 : get 1 (set 0 "A" empty) = "".
   Proof.
-    (* FILL IN HERE *) Admitted.
+    reflexivity.
+  Qed.
 
 End StringListsTableExamples.
 
@@ -771,6 +799,105 @@ End NicelyEncapsulatedExample.
     correctness and completenesss, sortedness, and
     non-duplication. Send us your solution, so we can include it! *)
 
+Module Type SortedETable.
+  Include Table.
+  Parameter bound : key -> table -> bool.
+  Parameter elements : table -> list (key * V).
+  Axiom elements_complete : forall k v t,
+      bound k t = true ->
+      get k t = v ->
+      In (k, v) (elements t).
+  Axiom elements_correct : forall k v t,
+      In (k, v) (elements t) -> bound k t = true /\ get k t = v.
+  Axiom elements_sorted_keys : forall t, Sort.sorted (list_keys (elements t)).
+  Axiom elements_nodup_keys : forall t,NoDup (list_keys (elements t)).
+End SortedETable.
+
+Module BSTETable (VT : ValType) :
+    (SortedETable with Definition V := VT.V with Definition default := VT.default).
+
+  Definition V := VT.V.
+  Definition default := VT.default.
+  Definition key := nat.
+
+  Inductive tree_table : Type :=
+  | Tree (t : tree V) (BSTt : BST t).
+
+  Definition table := tree_table.
+
+  Definition empty : table := Tree empty_tree (empty_tree_BST V).
+
+  Definition get (k : key) (t : table) : V :=
+    let (t, _) := t in lookup default k t.
+
+  Definition set (k : key) (v : V) (t : table) : table :=
+    let (t, Ht) := t in Tree (insert k v t) (insert_BST V k v t Ht).
+  
+  Definition bound k (t : table) := let (t, _) := t in SearchTree.bound k t.
+
+  Definition elements (t : table) := let (t, _) := t in SearchTree.elements t.
+
+  Theorem get_empty_default: forall (k : key),
+      get k empty = default.
+  Proof.
+    apply lookup_empty.
+  Qed.
+
+  Theorem get_set_same: forall (k : key) (v : V) (t : table),
+      get k (set k v t) = v.
+  Proof.
+    intros. unfold get, set.
+    destruct t.
+    apply lookup_insert_eq.
+  Qed.
+
+  Theorem get_set_other: forall (k k' : key) (v : V) (t : table),
+      k <> k' -> get k' (set k v t) = get k' t.
+  Proof.
+    intros. unfold get, set.
+    destruct t.
+    apply lookup_insert_neq. assumption.
+  Qed.
+
+  Theorem elements_complete : forall (k : key) (v : V) (t : table),
+      bound k t = true -> get k t = v -> In (k, v) (elements t).
+  Proof.
+    intros.
+    destruct t. eapply SearchTree.elements_complete; eauto.
+  Qed.
+
+  Theorem elements_correct : forall k v t,
+      In (k, v) (elements t) -> bound k t = true /\ get k t = v.
+  Proof.
+    intros. destruct t.
+    apply SearchTree.elements_correct; auto.
+  Qed.
+
+  Theorem elements_sorted_keys : forall t, Sort.sorted (list_keys (elements t)).
+  Proof.
+    intros. destruct t. apply SearchTree.sorted_elements. auto.
+  Qed.
+
+  Theorem elements_nodup_keys : forall t, NoDup (list_keys (elements t)).
+  Proof.
+    intros. destruct t. apply SearchTree.elements_nodup_keys. auto.
+  Qed.
+End BSTETable.
+
+Module StringBSTETableTest.
+  Module StringBSTETable := BSTETable StringVal.
+  Import StringBSTETable.
+  Print StringBSTETable.
+  Print table.
+  Print key.
+  Print V.
+  Print default.
+  Print empty.
+  Print get.
+  Print set.
+  Print bound.
+  Print elements.
+End StringBSTETableTest.
 (** [] *)
 
 (* ################################################################# *)
@@ -858,64 +985,84 @@ Module ListETableAbs (VT : ValType) <: ETableAbs.
   Definition key := nat.
   Definition table := list (key * V).
 
-  Definition empty : table
-    (* REPLACE THIS LINE WITH ":= _your_definition_ ." *). Admitted.
+  Definition empty : table := [].
 
-  Fixpoint get (k : key) (t : table) : V
-    (* REPLACE THIS LINE WITH ":= _your_definition_ ." *). Admitted.
+  Fixpoint get (k : key) (t : table) : V :=
+    match t with
+    | [] => default
+    | (k0, v0) :: t => if k0 =? k then v0 else get k t
+    end.
 
-  Definition set (k : key) (v : V) (t : table) : table
-    (* REPLACE THIS LINE WITH ":= _your_definition_ ." *). Admitted.
+  Definition set (k : key) (v : V) (t : table) : table := (k, v) :: t.
 
-  Fixpoint bound (k : key) (t : table) : bool
-    (* REPLACE THIS LINE WITH ":= _your_definition_ ." *). Admitted.
+  Fixpoint bound (k : key) (t : table) : bool :=
+    match t with
+    | [] => false
+    | (k0, v0) :: t => orb (k0 =? k) (bound k t)
+    end.
 
-  Definition elements (t : table) : list (key * V)
-    (* REPLACE THIS LINE WITH ":= _your_definition_ ." *). Admitted.
+  Definition elements (t : table) : list (key * V) := t.
 
-  Definition Abs (t : table) : partial_map V
-    (* REPLACE THIS LINE WITH ":= _your_definition_ ." *). Admitted.
+  Definition Abs (t : table) : partial_map V := map_of_list (elements t).
 
-  Definition rep_ok (t : table) : Prop
-    (* REPLACE THIS LINE WITH ":= _your_definition_ ." *). Admitted.
+  Definition rep_ok (t : table) : Prop := True.
 
   Theorem empty_ok : rep_ok empty.
-  Proof.
-    (* FILL IN HERE *) Admitted.
+  Proof. unfold rep_ok. auto. Qed.
 
   Theorem set_ok : forall (k : key) (v : V) (t : table),
       rep_ok t -> rep_ok (set k v t).
   Proof.
-    (* FILL IN HERE *) Admitted.
+  Proof. unfold rep_ok. auto. Qed.
 
   Theorem empty_relate :
     Abs empty = empty_map.
   Proof.
-    (* FILL IN HERE *) Admitted.
+    reflexivity.
+  Qed.
 
   Theorem bound_relate : forall (t : table) (k : key),
       rep_ok t ->
       map_bound k (Abs t) = bound k t.
   Proof.
-    (* FILL IN HERE *) Admitted.
+    intros. clear H.
+    unfold map_bound. induction t; auto.
+    unfold Abs. destruct a. simpl.
+    bdestruct (k0 =? k).
+    - subst. rewrite update_eq. auto.
+    - rewrite update_neq; auto.
+  Qed.
+
 
   Theorem lookup_relate : forall (t : table) (k : key),
       rep_ok t ->
       map_find default k (Abs t) = get k t.
   Proof.
-    (* FILL IN HERE *) Admitted.
+    intros. clear H.
+    induction t; auto.
+    destruct a. simpl.  
+    bdestruct (k0 =? k); unfold map_find, find, Abs; simpl.
+    - subst. rewrite update_eq. auto.
+    - rewrite update_neq; auto.
+  Qed.
 
   Theorem insert_relate : forall (t : table) (k : key) (v : V),
       rep_ok t ->
       map_update k v (Abs t) = Abs (set k v t).
   Proof.
-    (* FILL IN HERE *) Admitted.
+    intros. clear H. unfold map_update, Abs.
+    destruct t as [|(k0, v0) t'].
+    - auto.
+    - simpl. reflexivity.
+  Qed.
 
   Theorem elements_relate : forall (t : table),
       rep_ok t ->
       Abs t = map_of_list (elements t).
   Proof.
-    (* FILL IN HERE *) Admitted.
+    intros.
+    unfold Abs. reflexivity.
+  Qed.
 
 End ListETableAbs.
 
@@ -930,7 +1077,61 @@ Module StringListETableAbs := ListETableAbs StringVal.
     function [Abs] from [SearchTree]. All the proofs of the
     [relate] axioms should be simple applications of the lemmas
     already proved as exercises in that chapter. *)
+Module TreeTableModel (VT : ValType) <: ETableAbs.
+  Definition V := VT.V.
+  Definition key := nat.
+  Definition default := VT.default.
+  Definition table := tree V.
+  Definition empty : table := empty_tree.
 
+  Definition get (k : key) (t : table) : V :=
+    lookup default k t.
+  
+  Definition set (k : key) (v : V) (t : table) : table :=
+    insert k v t.
+
+  Definition bound (k : key) (t : table) : bool := bound k t.
+
+  Definition elements (t : table) := elements t.
+
+  Definition Abs (t : table) := Abs t.
+
+  Definition rep_ok (t : table) := BST t.
+
+  Theorem empty_ok : rep_ok empty.
+  Proof. apply empty_tree_BST. Qed.
+
+  Theorem set_ok : forall k v t, rep_ok t -> rep_ok (set k v t).
+  Proof. apply insert_BST. Qed.
+
+  Theorem empty_relate : Abs empty = empty_map.
+  Proof. apply empty_relate. Qed.
+
+  Theorem bound_relate : forall (t : table) (k : key),
+      rep_ok t ->
+      map_bound k (Abs t) = bound k t.
+  Proof. apply bound_relate. Qed.
+
+  Theorem lookup_relate : forall (t : table) (k : key),
+      rep_ok t ->
+      map_find default k (Abs t) = get k t.
+  Proof.
+    intros.
+    apply lookup_relate.
+    auto.
+  Qed.
+
+  Theorem insert_relate : forall (t : table) (k : key) (v : V),
+      rep_ok t ->
+      map_update k v (Abs t) = Abs (set k v t).
+  Proof. symmetry. apply insert_relate. auto. Qed.
+
+  Theorem elements_relate : forall (t : table),
+      rep_ok t ->
+      Abs t = map_of_list (elements t).
+  Proof. reflexivity. Qed.
+
+End TreeTableModel.
 (* Do not modify the following line: *)
 Definition manual_grade_for_TreeTableModel : option (nat*string) := None.
 
@@ -941,7 +1142,7 @@ Definition manual_grade_for_TreeTableModel : option (nat*string) := None.
 (** Repeat the previous exercise, this time using the alternative
     [Abs'] function from [SearchTree]. Hint: Just tweak your
     solution to the previous exercise. *)
-
+(* Omit *)
 (** [] *)
 
 (* ################################################################# *)
@@ -1002,49 +1203,54 @@ Module ListQueue <: Queue.
   Definition V := nat. (* for simplicity *)
   Definition queue := list V.
 
-  Definition empty : queue
-    (* REPLACE THIS LINE WITH ":= _your_definition_ ." *). Admitted.
+  Definition empty : queue := [].
 
-  Definition is_empty (q : queue) : bool
-    (* REPLACE THIS LINE WITH ":= _your_definition_ ." *). Admitted.
+  Definition is_empty (q : queue) : bool := match q with | [] => true | _ => false end.
 
-  Definition enq (q : queue) (v : V) : queue
-    (* REPLACE THIS LINE WITH ":= _your_definition_ ." *). Admitted.
+  Definition enq (q : queue) (v : V) : queue := q ++ [v].
 
-  Definition deq (q : queue) : queue
-    (* REPLACE THIS LINE WITH ":= _your_definition_ ." *). Admitted.
+  Definition deq (q : queue) : queue := match q with | [] => [] | _ :: q => q end.
 
-  Definition peek (default : V) (q : queue) : V
-    (* REPLACE THIS LINE WITH ":= _your_definition_ ." *). Admitted.
+  Definition peek (default : V) (q : queue) : V :=
+    match q with
+    | [] => default
+    | v :: _ => v
+    end.
 
   Theorem is_empty_empty : is_empty empty = true.
   Proof.
-    (* FILL IN HERE *) Admitted.
+    reflexivity.
+  Qed.
 
   Theorem is_empty_nonempty : forall q v,
       is_empty (enq q v) = false.
   Proof.
-    (* FILL IN HERE *) Admitted.
+    intros. destruct q; reflexivity.
+  Qed.
 
   Theorem peek_empty : forall d,
       peek d empty = d.
   Proof.
-    (* FILL IN HERE *) Admitted.
+    reflexivity.
+  Qed.
 
   Theorem peek_nonempty : forall d q v,
       peek d (enq q v) = peek v q.
   Proof.
-    (* FILL IN HERE *) Admitted.
+    destruct q; reflexivity.
+  Qed.
 
   Theorem deq_empty :
     deq empty = empty.
   Proof.
-    (* FILL IN HERE *) Admitted.
+    reflexivity.
+  Qed.
 
   Theorem deq_nonempty : forall q v,
       deq (enq q v) = if is_empty q then q else enq (deq q) v.
   Proof.
-    (* FILL IN HERE *) Admitted.
+    destruct q; reflexivity.
+  Qed.
 
 End ListQueue.
 
@@ -1121,22 +1327,37 @@ Module TwoListQueueAbs <: QueueAbs.
 
   Theorem empty_relate : Abs empty = [].
   Proof.
-    (* FILL IN HERE *) Admitted.
+    reflexivity.
+  Qed.
 
   Theorem enq_relate : forall q v,
       Abs (enq q v) = (Abs q) ++ [v].
   Proof.
-    (* FILL IN HERE *) Admitted.
+    intros. unfold Abs, enq.
+    destruct q.
+    simpl.
+    apply app_assoc.
+  Qed.
 
   Theorem peek_relate : forall d q,
       peek d q = hd d (Abs q).
   Proof.
-    (* FILL IN HERE *) Admitted.
+    intros. unfold peek. unfold Abs.
+    destruct q. destruct l; simpl; auto.
+    destruct l0; auto.
+  Qed.
 
   Theorem deq_relate : forall q,
       Abs (deq q) = tl (Abs q).
   Proof.
-    (* FILL IN HERE *) Admitted.
+    intros.
+    unfold Abs, deq.
+    destruct q as (f, r).
+    destruct f; auto.
+    destruct r; auto.
+    destruct (rev (v :: r)); auto.
+    simpl. apply app_nil_r.
+  Qed.
 
 End TwoListQueueAbs.
 
@@ -1186,6 +1407,7 @@ Proof. exists 1. reflexivity. Qed.
 (** Now we can provide that proof to convince Coq [two] is an [even_nat].
     We can do that with function [exist], which is suggestive of
     "there exists an [x : A] such that [P x]." *)
+Print exist.
 
 Check exist : forall {A : Type} (P : A -> Prop) (x : A), P x -> {x : A | P x}.
 
@@ -1288,7 +1510,9 @@ Definition vector (X : Type) :=
 
 Example a_vector : vector nat.
 Proof.
-  (* FILL IN HERE *) Admitted.
+  apply exist with ([], 0).
+  auto.
+Qed.
 
 (** [] *)
 
@@ -1299,7 +1523,10 @@ Proof.
 
 Definition vector_cons {X : Type} (x : X) (v : vector X) : vector X.
 Proof.
-  (* FILL IN HERE *) Admitted.
+  destruct v as [(l, n) H].
+  apply exist with (x :: l, S n).
+  simpl. rewrite H. reflexivity.
+Defined.
 
 (** Prove the correctness of your cons operation. *)
 
@@ -1309,7 +1536,12 @@ Definition list_of_vector {X : Type} (v : vector X) : list X :=
 Theorem vector_cons_correct : forall (X : Type) (x : X) (v : vector X),
     list_of_vector (vector_cons x v) = x :: (list_of_vector v).
 Proof.
-  (* FILL IN HERE *) Admitted.
+  intros.
+  destruct v as [(l, n) H].
+  simpl.
+  unfold list_of_vector. simpl.
+  reflexivity.
+Qed.
 
 (** [] *)
 
@@ -1319,7 +1551,12 @@ Proof.
 
 Definition vector_app {X : Type} (v1 v2 : vector X) : vector X.
 Proof.
-  (* FILL IN HERE *) Admitted.
+  destruct v1 as [(l1, n1) H1].
+  destruct v2 as [(l2, n2) H2].
+  apply exist with (l1 ++ l2, n1 + n2).
+  rewrite <-H1, <-H2.
+  apply length_app.
+Defined.
 
 (** Prove the correctness of your append operation. *)
 
@@ -1327,7 +1564,12 @@ Theorem vector_app_correct : forall (X : Type) (v1 v2 : vector X),
     list_of_vector (vector_app v1 v2) =
     list_of_vector v1 ++ list_of_vector v2.
 Proof.
-  (* FILL IN HERE *) Admitted.
+  intros.
+  destruct v1 as [(l1, n1) H1].
+  destruct v2 as [(l2, n2) H2].
+  unfold list_of_vector. simpl.
+  reflexivity.
+Qed.
 
 (** [] *)
 
@@ -1484,6 +1726,66 @@ End TreeETableSubset.
     should therefore just be quite easy: just return the association
     list.  The implementation of [set], though, will have to be a
     linear-time operation. *)
+
+Module ListsETable (VT : ValType) <: ETableSubset.
+
+  Definition V := VT.V.
+  Definition default := VT.default.
+  Definition key := nat.
+  Definition table := { l : list (key * V) | NoDup (list_keys l) }.
+
+  Definition empty : table.
+    apply exist with [].
+    constructor.
+  Defined.
+
+  Lemma NoDup_cons_inv : forall (T : Type) (a : T) l,
+    NoDup (a :: l) -> ~ In a l /\ NoDup l.
+  Proof.
+    intros. inversion H; auto.
+  Qed.
+
+  Definition get (k : key) (t : table) : V.
+    destruct t as [l H].
+    induction l.
+    - exact default.
+    - (* Cannot inversion n : NoDup (a :: x)? *)
+      apply NoDup_cons_inv in H. intuition.
+  Defined.
+
+  Definition set (k : key) (v : V) (t : table) : table.
+    destruct t as [l H].
+    induction l.
+    - apply exist with [(k, v)].
+      simpl. auto.
+    - destruct a. simpl in H.
+      destruct (NoDup_cons_inv _ _ _ H).
+      bdestruct (k0 =? k).
+      + apply exist with ((k, v) :: l).
+        simpl. subst. auto.
+      + destruct (IHl H1) as [l' IHl'].
+        (* We know nothing about l', fail *)
+  Admitted.
+
+
+  Fixpoint set_list (k : key) (v : V) (l : list (key * V)) :=
+    match l with
+    | [] => [(k, v)]
+    | (k0, v0) :: l' => if k0 =? k then (k, v) :: l' else (k0, v0) :: (set_list k v l')
+    end.
+  
+  Lemma set_list_nodup : forall k v l,
+      NoDup (list_keys l) -> NoDup (list_keys (set_list k v l)).
+  Proof.
+    induction l; intros.
+    - simpl. auto.
+    - destruct a. simpl. bdestruct (k0 =? k); simpl in *.
+      + subst. assumption.
+      + inv H.
+        (* useless *)
+  Admitted.
+
+End ListsETable.
 
 (* Do not modify the following line: *)
 Definition manual_grade_for_ListsETable : option (nat*string) := None.
