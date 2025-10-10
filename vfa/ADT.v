@@ -1745,15 +1745,16 @@ Module ListsETable (VT : ValType) <: ETableSubset.
     intros. inversion H; auto.
   Qed.
 
-  Definition get (k : key) (t : table) : V.
-    destruct t as [l H].
-    induction l.
-    - exact default.
-    - (* Cannot inversion n : NoDup (a :: x)? *)
-      apply NoDup_cons_inv in H. intuition.
-  Defined.
+  Fixpoint get_list (k : key) l : V :=
+    match l with
+    | [] => default
+    | (k0, v0) :: l' => if k0 =? k then v0 else get_list k l'
+    end.
+  
 
-  Definition set (k : key) (v : V) (t : table) : table.
+  Definition get (k : key) (t : table) : V := get_list k (proj1_sig t).
+
+  Definition set_fail (k : key) (v : V) (t : table) : table.
     destruct t as [l H].
     induction l.
     - apply exist with [(k, v)].
@@ -1767,25 +1768,120 @@ Module ListsETable (VT : ValType) <: ETableSubset.
         (* We know nothing about l', fail *)
   Admitted.
 
-
   Fixpoint set_list (k : key) (v : V) (l : list (key * V)) :=
     match l with
     | [] => [(k, v)]
     | (k0, v0) :: l' => if k0 =? k then (k, v) :: l' else (k0, v0) :: (set_list k v l')
     end.
   
-  Lemma set_list_nodup : forall k v l,
-      NoDup (list_keys l) -> NoDup (list_keys (set_list k v l)).
+  Lemma set_list_in : forall k0 k v l,
+    ~ In k0 (list_keys l) -> k0 <> k -> ~ In k0 (list_keys (set_list k v l)).
   Proof.
-    induction l; intros.
-    - simpl. auto.
-    - destruct a. simpl. bdestruct (k0 =? k); simpl in *.
-      + subst. assumption.
-      + inv H.
-        (* useless *)
-  Admitted.
+    induction l; intros; simpl; intros contra.
+    - destruct contra; auto.
+    - destruct a.
+      simpl in H. apply Decidable.not_or in H; destruct H.
+      intuition.
+      bdestruct (k1 =? k);
+        destruct contra; auto.
+  Qed.
+
+  Lemma set_list_nodup : forall k v l,
+    NoDup (list_keys l) -> NoDup (list_keys (set_list k v l)).
+  Proof.
+    induction l; intros; simpl; auto.
+    destruct a. bdestruct (k0 =? k).
+    - simpl in *. subst. exact H.
+    - inv H. simpl. constructor; auto.
+      + apply set_list_in; auto.
+  Qed.
+
+  Definition set (k : key) (v : V) (t : table) : table.
+    destruct t as [l H].
+    apply exist with (set_list k v l).
+    apply set_list_nodup. exact H.
+  Defined.
+
+  Theorem get_empty_default : forall k,
+      get k empty = default.
+  Proof.
+    simpl. auto.
+  Qed.
+
+  Theorem get_set_same : forall k v t,
+      get k (set k v t) = v.
+  Proof.
+    intros. destruct t as [l H]. unfold get. simpl. clear H.
+    induction l as [|(k0, v0) l']; simpl.
+    - rewrite Nat.eqb_refl. auto.
+    - bdestruct (k0 =? k); simpl.
+      + rewrite (Nat.eqb_refl k); auto.
+      + bdestruct (k0 =? k); try lia; auto.
+  Qed.
+
+  Theorem get_set_other : forall (k k' : key) (v : V) (t : table),
+      k <> k' -> get k' (set k v t) = get k' t.
+  Proof.
+    intros. destruct t as [l Hl]. unfold get. simpl. clear Hl.
+    induction l as [|(k0, v0) l']; simpl.
+    - bdestruct (k =? k'); try lia; auto.
+    - bdestruct (k0 =? k); simpl.
+      + bdestruct (k =? k');
+        bdestruct (k0 =? k'); try lia; auto.
+      + bdestruct (k0 =? k'); auto.
+  Qed.
+
+  Fixpoint bound_list (k : key) (l : list (nat * V)) : bool :=
+    match l with
+    | [] => false
+    | (k0, _) :: l' => if (k0 =? k) then true else bound_list k l'
+    end.
+
+  Definition bound (k : key) (t : table) : bool := bound_list k (proj1_sig t).
+
+  Definition elements (t : table) := proj1_sig t.
+
+  Theorem bound_empty : forall k, bound k empty = false.
+  Proof. auto. Qed.
+  
+  Theorem bound_set_same : forall k v t, bound k (set k v t) = true.
+  Proof.
+    destruct t as [l H]. unfold bound. simpl. clear H.
+    induction l as [|(k0, v0) l']; bdall.
+  Qed.
+
+  Theorem bound_set_other : forall k k' v t,
+      k <> k' -> bound k' (set k v t) = bound k' t.
+  Proof.
+    destruct t as [l H]. unfold bound. simpl. clear H.
+    induction l as [|(k0, v0) l']; bdall.
+  Qed.
+
+  Theorem elements_complete : forall k v t,
+      bound k t = true ->
+      get k t = v ->
+      In (k, v) (elements t).
+  Proof. destruct t as [l H]. unfold bound, get. simpl. clear H.
+    induction l as [| (k0, v0) l'].
+    - intros. inv H.
+    - bdall. intros. subst. auto.
+  Qed.
+
+  Theorem elements_correct : forall k v t,
+      In (k, v) (elements t) ->
+      bound k t = true /\ get k t = v.
+  Proof. destruct t as [l H]. unfold bound, get. simpl.
+    induction l as [| (k0, v0) l']; simpl; intros; [inv H0|].
+    destruct H0.
+    - inv H0. bdall.
+    - simpl in H. inv H. bdall.
+      subst k0.
+      destruct H3. apply in_map_iff. exists (k, v). auto.
+  Qed.
 
 End ListsETable.
+
+(* Very tough. Automation might be of great help *)
 
 (* Do not modify the following line: *)
 Definition manual_grade_for_ListsETable : option (nat*string) := None.

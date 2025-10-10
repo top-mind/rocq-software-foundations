@@ -10,8 +10,9 @@
   + [x] Perm
   + [x] Sort
   + [x] SearchTree
-  + [x] Redblack
   + [x] Extract
+  + [x] ADT
+  + [x] Redblack
 - [ ] slf
 
 # Comments
