@@ -153,7 +153,16 @@ Qed.
 Lemma select_perm: forall x l y r,
     select x l = (y, r) -> Permutation (x :: l) (y :: r).
 Proof.
-  (* FILL IN HERE *) Admitted.
+  intros x l.
+  generalize dependent x.
+  induction l; simpl; intros.
+  - inv H. auto.
+  - bdestruct (x <=? a).
+    + specialize IHl with (x:=x).
+      destruct (select x l). inv H. eauto.
+    + specialize IHl with (x:=a).
+      destruct (select a l). inv H. eauto.
+Qed.
 
 (** [] *)
 
@@ -166,7 +175,11 @@ Proof.
 Lemma select_rest_length : forall x l y r,
     select x l = (y, r) -> length l = length r.
 Proof.
-  (* FILL IN HERE *) Admitted.
+  intros.
+  apply select_perm in H.
+  apply Permutation_length in H.
+  info_auto.
+Qed.
 
 (** [] *)
 
@@ -178,7 +191,15 @@ Proof.
 Lemma selsort_perm: forall n l,
     length l = n -> Permutation l (selsort l n).
 Proof.
-  (* FILL IN HERE *) Admitted.
+  induction n; intros.
+  - apply length_zero_iff_nil in H. subst. auto.
+  - destruct l as [|x l']; auto.
+    simpl in *. inv H.
+    destruct (select x l') as (y, l) eqn:E.
+    pose proof (select_perm _ _ _ _ E).
+    apply select_rest_length in E.
+    eauto.
+Qed.
 
 (** [] *)
 
@@ -189,7 +210,11 @@ Proof.
 Lemma selection_sort_perm: forall l,
     Permutation l (selection_sort l).
 Proof.
-  (* FILL IN HERE *) Admitted.
+  unfold selection_sort.
+  intros.
+  apply selsort_perm.
+  auto.
+Qed.
 
 (** [] *)
 
@@ -202,7 +227,16 @@ Lemma select_fst_leq: forall al bl x y,
     select x al = (y, bl) ->
     y <= x.
 Proof.
-  (* FILL IN HERE *) Admitted.
+  induction al; simpl; intros.
+  - inv H. auto.
+  - bdestruct (x <=? a).
+    + specialize IHal with (x:=x).
+      destruct (select x al). inv H. eauto.
+    + specialize IHal with (x:=a).
+      destruct (select a al). inv H.
+      assert (y <= a) by eauto.
+      lia.
+Qed.
 
 (** [] *)
 
@@ -221,7 +255,12 @@ Infix "<=*" := le_all (at level 70, no associativity).
 
 Lemma le_all__le_one : forall lst y n,
     y <=* lst -> In n lst -> y <= n.
-Proof. (* FILL IN HERE *) Admitted.
+Proof.
+  intros. 
+  unfold le_all in H.
+  rewrite Forall_forall in H.
+  auto.
+Qed.
 
 (** [] *)
 
@@ -235,8 +274,22 @@ Lemma select_smallest: forall al bl x y,
     select x al = (y, bl) ->
     y <=* bl.
 Proof.
-  (* FILL IN HERE *) Admitted.
-
+  induction al; simpl; intros.
+  - inv H. auto.
+  - bdestruct (x <=? a).
+    + specialize IHal with (x:=x).
+      destruct (select x al) eqn:E. inv H.
+      assert (y <=* l) by auto.
+      apply select_fst_leq in E.
+      assert (y <= a) by lia.
+      auto.
+    + specialize IHal with (x:=a).
+      destruct (select a al) eqn:E. inv H.
+      assert (y <=* l) by auto.
+      apply select_fst_leq in E.
+      assert (y <= x) by lia.
+      auto.
+Qed.
 (** [] *)
 
 (** **** Exercise: 2 stars, standard (select_in) *)
@@ -248,7 +301,18 @@ Lemma select_in : forall al bl x y,
     select x al = (y, bl) ->
     In y (x :: al).
 Proof.
-  (* FILL IN HERE *) Admitted.
+  induction al; simpl; intros.
+  - inv H. auto.
+  - bdestruct (x <=? a).
+    + specialize IHal with (x:=x).
+      destruct (select x al). inv H.
+      assert (In y (x :: al)) by eauto.
+      destruct H; auto.
+    + specialize IHal with (x:=a).
+      destruct (select a al). inv H.
+      assert (In y (a :: al)) by eauto.
+      destruct H; auto.
+Qed.
 
 (** [] *)
 
@@ -265,7 +329,18 @@ Lemma cons_of_small_maintains_sort: forall bl y n,
     sorted (selsort bl n) ->
     sorted (y :: selsort bl n).
 Proof.
-  (* FILL IN HERE *) Admitted.
+  intros.
+  symmetry in H.
+  pose proof (selsort_perm _ _ H).
+  remember (selsort bl n) as al.
+  pose proof (Forall_perm _ _ _ H2 H0).
+  clear -H1 H3.
+  destruct al; auto.
+  constructor; auto.
+  eapply le_all__le_one.
+  - apply H3.
+  - left. auto.
+Qed.
 
 (** [] *)
 
@@ -278,8 +353,15 @@ Proof.
 Lemma selsort_sorted : forall n al,
     length al = n -> sorted (selsort al n).
 Proof.
-  (* FILL IN HERE *) Admitted.
-
+  induction n; intros.
+  - apply length_zero_iff_nil in H. subst. auto.
+  - destruct al as [|x al']; auto.
+    inversion H. clear H.
+    simpl. destruct (select x al') as (y, bl) eqn:E.
+    subst.
+    apply cons_of_small_maintains_sort;
+      eauto using select_smallest, select_rest_length, eq_sym.
+Qed.
 (** [] *)
 
 (** **** Exercise: 1 star, standard (selection_sort_sorted) *)
@@ -289,7 +371,8 @@ Proof.
 Lemma selection_sort_sorted : forall al,
     sorted (selection_sort al).
 Proof.
-  (* FILL IN HERE *) Admitted.
+  unfold selection_sort. intros. apply selsort_sorted. auto.
+Qed.
 
 (** [] *)
 
@@ -300,7 +383,9 @@ Proof.
 Theorem selection_sort_is_correct :
   is_a_sorting_algorithm selection_sort.
 Proof.
-  (* FILL IN HERE *) Admitted.
+  unfold is_a_sorting_algorithm.
+  split; auto using selection_sort_perm, selection_sort_sorted.
+Qed.
 
 (** [] *)
 
@@ -375,7 +460,15 @@ Check selsort'_equation.
 Lemma selsort'_perm : forall n l,
     length l = n -> Permutation l (selsort' l).
 Proof.
-  (* FILL IN HERE *) Admitted.
+  induction n; intros.
+  - apply length_zero_iff_nil in H. subst. auto.
+  - rewrite selsort'_equation.
+    destruct l; auto.
+    destruct (select n0 l) as (y, r') eqn:E.
+    inv H.
+    pose proof (select_rest_length _ _ _ _ E).
+    apply select_perm in E. eauto.
+Qed.
 
 (** [] *)
 
@@ -389,7 +482,16 @@ Lemma cons_of_small_maintains_sort': forall bl y,
     y <=* bl ->
     sorted (selsort' bl) ->
     sorted (y :: selsort' bl).
-Proof. (* FILL IN HERE *) Admitted.
+Proof.
+  intros.
+  destruct (selsort' bl) eqn:E; auto.
+  constructor; auto.
+  apply le_all__le_one with bl; auto.
+  assert (Permutation bl (selsort' bl)) by eauto using selsort'_perm.
+  apply Permutation_in with (n :: l).
+  - rewrite <-E. auto using Permutation_sym.
+  - left. auto.
+Qed.
 
 (** [] *)
 
@@ -400,7 +502,17 @@ Proof. (* FILL IN HERE *) Admitted.
 
 Lemma selsort'_sorted : forall n al,
     length al = n -> sorted (selsort' al).
-Proof. (* FILL IN HERE *) Admitted.
+Proof.
+  induction n; simpl; intros.
+  - apply length_zero_iff_nil in H. subst. auto.
+  - rewrite selsort'_equation. destruct al; auto.
+    destruct (select n0 al) as (y, r') eqn:E.
+    pose proof (select_smallest _ _ _ _ E).
+    apply cons_of_small_maintains_sort'; auto.
+    inv H.
+    apply select_rest_length in E.
+    auto.
+Qed.
 
 (** [] *)
 
@@ -410,7 +522,11 @@ Proof. (* FILL IN HERE *) Admitted.
 
 Theorem selsort'_is_correct :
   is_a_sorting_algorithm selsort'.
-Proof. (* FILL IN HERE *) Admitted.
+Proof with auto.
+  unfold is_a_sorting_algorithm. split.
+  - eapply selsort'_perm...
+  - eapply selsort'_sorted...
+Qed.
 
 (** [] *)
 
