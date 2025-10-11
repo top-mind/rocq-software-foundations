@@ -208,11 +208,10 @@ Lemma insert_perm: forall x l,
 Proof.
   intros.
   induction l; auto.
-  unfold insert.
+  simpl.
   bdestruct (x <=? a).
   - auto.
-  - fold insert.
-    eapply perm_trans.
+  - eapply perm_trans.
     + apply perm_swap.
     + apply perm_skip, IHl.
 Qed.
