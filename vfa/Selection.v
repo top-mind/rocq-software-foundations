@@ -547,7 +547,22 @@ From VFA Require Import Multiset.
 Lemma select_contents : forall al bl x y,
   select x al = (y, bl) ->
   union (singleton x) (contents al) = union (singleton y) (contents bl).
-Proof. (* FILL IN HERE *) Admitted.
+Proof.
+  induction al; simpl; intros.
+  - inv H. simpl. reflexivity.
+  - bdestruct (x <=? a).
+    + destruct (select x al) eqn:E.
+      inv H. simpl.
+      specialize (IHal _ _ _ E).
+      rewrite union_swap.
+      rewrite IHal.
+      apply union_swap.
+    + destruct (select a al) eqn:E.
+      inv H. simpl.
+      specialize (IHal _ _ _ E).
+      rewrite IHal.
+      apply union_swap.
+Qed.
 
 (** [] *)
 
@@ -556,22 +571,41 @@ Proof. (* FILL IN HERE *) Admitted.
 Lemma selection_sort_contents : forall n l,
   length l = n ->
   contents l = contents (selection_sort l).
-Proof. (* FILL IN HERE *) Admitted.
+Proof.
+  unfold selection_sort.
+  induction n; intros.
+  - apply length_zero_iff_nil in H. subst. auto.
+  - destruct l; simpl in *; auto.
+    injection H as H.
+    destruct (select v l) eqn:E.
+    rewrite (select_contents _ _ _ _ E).
+    simpl.
+    apply select_rest_length in E.
+    subst.
+    symmetry in E.
+    rewrite (IHn l0 E).
+    rewrite E. auto.
+Qed.
 
 (** [] *)
 
 (** **** Exercise: 2 stars, standard, optional (sorted_iff_sorted) *)
 
 Lemma sorted_iff_sorted : forall l, sorted l <-> Sort.sorted l.
-Proof. (* FILL IN HERE *) Admitted.
-
-(** [] *)
+Proof.
+  induction l; split; intros; try constructor;
+    inv H; constructor; auto; intuition.
+Qed.
 
 (** **** Exercise: 1 star, standard, optional (selection_sort_correct') *)
 
 Theorem selection_sort_correct' :
   is_a_sorting_algorithm' selection_sort.
-Proof. (* FILL IN HERE *) Admitted.
+Proof.
+  unfold is_a_sorting_algorithm'. split.
+  - eauto using selection_sort_contents.
+  - apply sorted_iff_sorted. apply selection_sort_sorted.
+Qed.
 
 (** [] *)
 
